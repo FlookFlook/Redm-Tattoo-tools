@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="th">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Tattoo Placer</title>
+    <link rel="stylesheet" href="placer.css">
+</head>
+<body>
+
+<header class="top">
+    <div class="brand">
+        <b>Tattoo Placer</b>
+        <span>วางลายบนผิวท่อนบน (bodies_upper) · 512×512 · ส่วนที่ตกขอบจะโผล่อีกฝั่งเอง</span>
+    </div>
+    <div class="top-actions">
+        <button id="btnUndo" class="btn" title="Ctrl+Z" disabled>↶ เลิกทำ</button>
+        <button id="btnRedo" class="btn" title="Ctrl+Y" disabled>↷ ทำซ้ำ</button>
+        <button id="btnOpen" class="btn">เปิดโปรเจกต์</button>
+        <button id="btnSave" class="btn">บันทึกโปรเจกต์</button>
+        <input id="fileProject" type="file" accept=".json,application/json" hidden>
+    </div>
+</header>
+
+<div id="draftBar" class="draft-bar hidden">
+    <span id="draftText"></span>
+    <button id="draftRestore" class="btn primary">กู้คืนงานนี้</button>
+    <button id="draftDiscard" class="btn">ไม่เอา</button>
+</div>
+
+<main>
+    <!-- ───────────────────────── ซ้าย: เลเยอร์ / ไกด์ / มุมมอง ───────────────────────── -->
+    <aside class="side">
+        <section>
+            <h3>เลเยอร์ลาย</h3>
+            <button id="btnAdd" class="btn primary wide">+ เพิ่มรูปลาย</button>
+            <input id="fileImg" type="file" accept="image/png,image/jpeg,image/webp" multiple hidden>
+            <button id="btnYtdOpen" class="btn wide">เปิดไฟล์ .ytd มาแก้ต่อ…</button>
+            <input id="fileYtdOpen" type="file" accept=".ytd" multiple hidden>
+            <p class="hint">หรือลากไฟล์รูป / .ytd มาวางบนพื้นที่วาด — PNG พื้นใส หรือ JPG/PNG หมึกดำบนพื้นขาว
+                · .ytd ลงเป็นเลเยอร์บนภาพ UV ตรงตำแหน่งเดิม (ชื่อลงท้าย _fr / _f = ของหญิง · _legs = ขา)</p>
+            <ul id="layers"></ul>
+        </section>
+
+        <section>
+            <h3>ไกด์ (ลายเดิมในเกม)</h3>
+            <p class="hint">ลายเดิมวางตามตำแหน่งจริงบนตัว ใช้ดูว่าแขน / อก / หลัง อยู่ตรงไหนของภาพ</p>
+            <label class="check"><input type="checkbox" id="refAll"> แสดงลายเดิมทุกชุด (จาง ๆ)</label>
+            <select id="refPick"><option value="">— ไม่แสดงชุดเดียว —</option></select>
+            <label class="range-row">ความชัดไกด์ <input type="range" id="refOpacity" min="5" max="90" value="35"></label>
+            <button id="btnRefAsLayer" class="btn wide">ใช้ชุดที่เลือกเป็นเลเยอร์ (แก้ต่อจากลายเดิม)</button>
+        </section>
+
+        <section class="needs-body">
+            <h3>ตัวโมเดล 3D</h3>
+            <label class="field"><span>ผิวท่อนบน (ที่ลายสักอยู่)</span><select id="skinUpper"></select></label>
+            <label class="field"><span>ผิวท่อนล่าง</span><select id="skinLower"></select></label>
+            <label class="field"><span>ผิวหน้า</span><select id="skinHead"></select></label>
+            <input id="fileSkin" type="file" accept=".ytd,.dds,.png,.jpg,.jpeg,.webp" hidden>
+            <div class="tint-row">
+                <span>คูณสีผิว</span>
+                <input type="color" id="skinTint" value="#ffffff">
+                <button id="skinTintReset" class="btn">คืนค่า</button>
+            </div>
+            <p class="hint">เลือก "+ โหลดไฟล์ผิวเอง" ในรายการ (.ytd / .dds BC1-BC3 / .png) หรือใส่ไฟล์ใน tex/ แล้วรัน build_model.py ใหม่</p>
+        </section>
+
+        <section class="needs-body">
+            <h3>เสื้อผ้า / โมเดลเสริม</h3>
+            <button id="btnOutfitAdd" class="btn wide">ใส่เสื้อผ้า (.ydd.xml + .ytd)…</button>
+            <input id="fileOutfit" type="file" accept=".xml,.ytd,.dds,.png,.jpg,.jpeg,.webp" multiple hidden>
+            <p id="outfitEmpty" class="hint">เลือกไฟล์ .ydd.xml ที่ export จาก CodeX (เลือกหลายไฟล์ได้) — ใส่ .ytd / .dds ของเสื้อผ้า
+                มาพร้อมกันจะได้สีจริง ไม่ใส่ใช้สีเรียบ · ชื่อมี mr1 = ชาย / fr1 = หญิง · ดูอย่างเดียว คลิกทะลุไปที่ผิว</p>
+            <ul id="outfitList" class="outfit-list"></ul>
+            <label class="check"><input type="checkbox" id="outfitShow" checked> แสดงเสื้อผ้า</label>
+            <label class="range-row">ความทึบ <input type="range" id="outfitAlpha" min="15" max="100" value="100"><b id="outfitAlphaV">100%</b></label>
+            <div class="tint-row">
+                <span>สีเสื้อผ้า (ชิ้นที่ไม่มี texture)</span>
+                <input type="color" id="outfitColor" value="#766c60">
+            </div>
+        </section>
+
+        <section>
+            <h3>มุมมอง</h3>
+            <label class="check"><input type="checkbox" id="wrapX" checked> ห่อซ้าย ↔ ขวา (ตกขอบแล้วโผล่อีกฝั่ง)</label>
+            <label class="check"><input type="checkbox" id="wrapY"> ห่อบน ↕ ล่าง</label>
+            <label class="check"><input type="checkbox" id="showTile" checked> แสดงภาพต่อเนื่องรอบขอบ (ดูรอยต่อ)</label>
+            <label class="check"><input type="checkbox" id="showGrid" checked> เส้นตาราง</label>
+            <div class="needs-body">
+                <label class="check"><input type="checkbox" id="uvGuide" checked> ชิ้นผิวของโมเดล (นอกตัวทำมืด)</label>
+                <p class="legend"><i class="ln border"></i> ขอบตัว (คอ / เอว) — ลายเลยเส้นนี้ไปจะหาย</p>
+                <p class="legend"><i class="ln seam"></i> รอยต่อชิ้น — ผิวต่อกันบนตัว แต่ลายต้องไปต่อที่อีกชิ้นเอง</p>
+            </div>
+            <div class="seg" id="zoomSeg">
+                <button data-z="fit" class="active">พอดีจอ</button>
+                <button data-z="1">1×</button>
+                <button data-z="1.5">1.5×</button>
+                <button data-z="2">2×</button>
+            </div>
+        </section>
+    </aside>
+
+    <!-- ───────────────────────── กลาง: พื้นที่วาด ───────────────────────── -->
+    <section class="stage">
+        <div class="stage-bar needs-body">
+            <div class="seg compact" id="layoutSeg">
+                <button data-l="uv">ภาพ UV</button>
+                <button data-l="both" class="active">UV + ตัว 3D</button>
+                <button data-l="3d">ตัว 3D</button>
+            </div>
+            <div class="seg compact" id="uvPartSeg" title="ภาพ UV ที่แสดงในพื้นที่ 2D (ส่งออกเป็นคนละไฟล์)">
+                <button data-p="upper" class="active">ภาพ UV ท่อนบน</button>
+                <button data-p="lower">ภาพ UV ขา</button>
+            </div>
+            <div class="gender-group">
+                <div class="seg compact" id="genderSeg" title="เพศที่กำลังแก้ — แต่ละเพศจำตำแหน่งลายแยกกัน">
+                    <button data-g="male" class="active">ชาย</button>
+                    <button data-g="female">หญิง</button>
+                </div>
+                <button id="bothToggle" class="btn toggle compact-btn" title="ชายกับหญิงยืนข้างกัน คลิกตัวไหนก็แก้ตัวนั้น">ดูทั้งคู่</button>
+            </div>
+        </div>
+        <div class="tool-bar">
+            <div class="seg compact" id="toolSeg">
+                <button data-t="move" class="active" title="M">ย้าย</button>
+                <button data-t="erase" title="E">ยางลบ</button>
+                <button data-t="restore" title="R">แปรงคืนลาย</button>
+            </div>
+            <label class="tb-range">แปรง <input type="range" id="brushSize" min="0.2" max="15" step="0.1" value="1.5"><b id="brushSizeV">1.5 ซม.</b></label>
+            <label class="tb-range">ขอบนุ่ม <input type="range" id="brushSoft" min="0" max="100" value="50"><b id="brushSoftV">50%</b></label>
+            <span class="tb-hint">ลบเฉพาะเลเยอร์ที่เลือก · ลากบนตัวหรือบนภาพ UV · [ ] = ขนาดแปรง · ลากที่ว่างบนตัว 3D = หมุนกล้อง</span>
+        </div>
+        <div id="stageBody" data-layout="both">
+            <div id="stageWrap"><canvas id="view"></canvas></div>
+            <div id="bodyWrap" class="needs-body">
+                <canvas id="body3d"></canvas>
+                <div class="body-top">
+                    <div class="seg compact" id="bodyViews">
+                        <button data-v="front">หน้า</button>
+                        <button data-v="back">หลัง</button>
+                        <button data-v="left">ซ้าย</button>
+                        <button data-v="right">ขวา</button>
+                        <button data-v="torso">ลำตัว</button>
+                        <button data-v="legs">ขา</button>
+                        <button data-v="full">ทั้งตัว</button>
+                    </div>
+                    <label class="check"><input type="checkbox" id="bodyOutline" checked> กรอบลายที่เลือก</label>
+                </div>
+                <p id="bodyNote" class="body-note hidden"></p>
+                <div id="captureFrame" class="capture hidden">
+                    <div id="captureBox" class="capture-box"><span>รูปในร้านจะได้เฉพาะในกรอบนี้</span></div>
+                    <div class="capture-bar">
+                        <span>ลากที่ว่าง = หมุน · ล้อ = ซูม · คลิกขวาลาก = เลื่อน · ปุ่มมุมมองด้านบนใช้ได้</span>
+                        <div>
+                            <button id="captureTake" class="btn primary">ถ่ายรูปนี้</button>
+                            <button id="captureCancel" class="btn">ยกเลิก (Esc)</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="body-foot">
+                    <span id="bodyCoord"></span>
+                    <span class="keys">ลากผิวเปล่า / ที่ว่าง = หมุน · ลากตรงลาย = ย้าย · Alt+คลิกลาย = แยกชิ้นตามรอยต่อ · ดับเบิลคลิก = ย้ายลายที่เลือกมาตรงนั้น · ล้อ = ซูม · Shift+ล้อ = ขนาดลาย · Ctrl+ล้อ = หมุนลาย · คลิกขวาลาก = เลื่อนกล้อง</span>
+                </div>
+            </div>
+        </div>
+        <div class="status">
+            <span id="status">ยังไม่มีเลเยอร์</span>
+            <span class="keys">ลาก = ย้าย · จุดจับมุม/ขอบ = ย่อ/ยืด · Alt+คลิก = แยกชิ้น · ล้อเมาส์ = ย่อ/ขยาย · Shift+ล้อ = หมุน · ลูกศร = ขยับทีละ 1 (Shift = 10) · Del = ลบ · Ctrl+D = ทำสำเนา · H / V = กลับด้าน</span>
+        </div>
+    </section>
+
+    <!-- ───────────────────────── ขวา: คุณสมบัติ / ส่งออก ───────────────────────── -->
+    <aside class="side">
+        <section>
+            <h3>เลเยอร์ที่เลือก</h3>
+            <p id="noSel" class="hint">คลิกลายบนพื้นที่วาด หรือเลือกจากรายการทางซ้าย</p>
+            <div id="selProps" class="hidden">
+                <label class="field"><span>ชื่อ</span><input id="pName" type="text" spellcheck="false"></label>
+                <label class="field needs-body"><span>วิธีวาง</span>
+                    <select id="pPlace">
+                        <option value="stick">ติดตามผิว — แปะแนบผิวแบบกระดาษลอกลาย (แนะนำ)</option>
+                        <option value="flat">ฉายตรง — ฉายจากด้านหน้าของผิวตรงนั้น</option>
+                        <option value="view">ฉายจากมุมกล้อง — ตรงตามที่เห็นบนจอ</option>
+                        <option value="wrap">ห่อรอบ — พันรอบแขน / ขา / ลำตัว</option>
+                        <option value="uv">บนภาพ UV ตรง ๆ (แบบเดิม)</option>
+                    </select>
+                </label>
+                <button id="pViewNow" class="btn wide hidden">ใช้มุมกล้องตอนนี้</button>
+                <button id="pCopyPose" class="btn wide needs-body" title="ชายกับหญิงจำตำแหน่งลายแยกกัน — ปุ่มนี้ยกตำแหน่งจากอีกเพศมาวางที่จุดเดียวกันบนตัว">ใช้ตำแหน่งจากอีกเพศ</button>
+                <p class="hint needs-body">ทุกแบบยกเว้น "บนภาพ UV" ต่อข้ามรอยต่อเอง · ติดตามผิว = ไม่ยืดตรงที่โค้ง
+                    · ฉายตรง / ฉายจากกล้อง = เหมือนฉายโปรเจกเตอร์ ตรงโค้งจะยืด · ห่อรอบ = ปลอกแขน / รอบน่อง</p>
+                <div id="steppers"></div>
+                <div class="btn-row">
+                    <button id="pFlipX" class="btn toggle">กลับซ้าย-ขวา</button>
+                    <button id="pFlipY" class="btn toggle">กลับบน-ล่าง</button>
+                </div>
+                <button id="pResetStretch" class="btn wide">ยกเลิกการยืด (กว้าง / สูง 100%)</button>
+                <button id="pClearErase" class="btn wide">ล้างยางลบของเลเยอร์นี้ (ลายกลับมาครบ)</button>
+
+                <h4>แปลงรูปเป็นหมึก</h4>
+                <label class="field"><span>อ่านลายจาก</span>
+                    <select id="pMode">
+                        <option value="alpha">ความโปร่งใสของรูป (PNG พื้นใส)</option>
+                        <option value="dark">ความเข้มของสี (หมึกดำบนพื้นขาว)</option>
+                    </select>
+                </label>
+                <label class="range-row">ตัดพื้นหลัง <input type="range" id="pThreshold" min="0" max="90" value="0"><b id="pThresholdV">0</b></label>
+                <label class="range-row">ความเข้มหมึก <input type="range" id="pGain" min="50" max="400" value="100"><b id="pGainV">100%</b></label>
+                <label class="check"><input type="checkbox" id="pInvert"> กลับสี (เส้นขาวเป็นลาย)</label>
+                <label class="check"><input type="checkbox" id="pColor"> ลายสี — ใช้สีจากรูป</label>
+                <label class="field"><span>ใช้กับตัวละคร</span>
+                    <select id="pOnly">
+                        <option value="">ชายและหญิง</option>
+                        <option value="male">ชายเท่านั้น</option>
+                        <option value="female">หญิงเท่านั้น</option>
+                    </select>
+                </label>
+                <p class="hint">ลายสีย้อมสีหมึกในร้านไม่ได้ ถ้าในไฟล์มีเลเยอร์ลายสี ทั้งไฟล์จะส่งออกเป็นลายสี
+                    (ส่วนที่เป็นหมึกเดียวกลายเป็นสีดำ)</p>
+
+                <div class="btn-row">
+                    <button id="pDup" class="btn">ทำสำเนา</button>
+                    <button id="pMirror" class="btn" title="ทำสำเนา กลับซ้าย-ขวา แล้ววางฝั่งตรงข้ามของภาพ">สำเนาไปอีกข้าง</button>
+                </div>
+                <button id="pSplit" class="btn wide needs-body" title="ชิ้นที่พาดข้ามรอยต่อไปอีกฝั่งกลายเป็นเลเยอร์ของตัวเอง ขยับแยกกันได้">แยกชิ้นตามรอยต่อ (หรือ Alt+คลิกที่ชิ้น)</button>
+                <div class="btn-row">
+                    <button id="pCenter" class="btn">จัดกลางภาพ</button>
+                    <button id="pDelete" class="btn danger">ลบเลเยอร์</button>
+                </div>
+            </div>
+        </section>
+
+        <section>
+            <h3>ส่งออกเป็นลายในร้าน</h3>
+            <label class="field"><span>ชื่อไฟล์ (a-z 0-9 _)</span><input id="eName" type="text" spellcheck="false" placeholder="tattoo_my_rose"></label>
+            <label class="field"><span>ชื่อในร้าน</span><input id="eLabel" type="text" placeholder="กุหลาบของฉัน"></label>
+            <div class="two">
+                <label class="field"><span>หมวด</span>
+                    <select id="eCat"><option value="small">ชิ้นเล็ก</option><option value="medium" selected>ชุดกลาง</option><option value="large">ชุดใหญ่</option></select>
+                </label>
+                <label class="field"><span>ราคา ($)</span><input id="ePrice" type="text" inputmode="numeric" value="50"></label>
+            </div>
+            <label class="field"><span>ใช้กับตัวละคร</span>
+                <select id="eGender">
+                    <option value="both">ชายและหญิง</option>
+                    <option value="male">ชายเท่านั้น</option>
+                    <option value="female">หญิงเท่านั้น</option>
+                </select>
+            </label>
+            <label class="field"><span>ความละเอียด</span>
+                <select id="eRes">
+                    <option value="512" selected>512 × 512 (เท่าผิวในเกม แนะนำ)</option>
+                    <option value="1024">1024 × 1024</option>
+                    <option value="2048">2048 × 2048 (ไฟล์ใหญ่ ~1.5 MB)</option>
+                </select>
+            </label>
+            <label class="check needs-body"><input type="checkbox" id="eHiPreview"> พรีวิวที่ความละเอียดนี้ (คมกว่าที่เห็นในเกม — ในเกมย่อลงผิว 512 เสมอ)</label>
+            <div class="field ink-tune">
+                <span>ช่วยให้ลายคมในเกม (ผิวในเกมมีแค่ 512 — พรีวิวปกติคือขนาดเดียวกับในเกม)</span>
+                <label class="check"><input type="checkbox" id="thinWarn"> เตือนเส้นบาง <i class="sw t1"></i> หายในเกม <i class="sw t2"></i> จาง/เบลอ</label>
+                <p id="thinStat" class="hint hidden"></p>
+                <label class="range-row">หนาเส้น
+                    <select id="inkThick">
+                        <option value="0">เท่าเดิม</option>
+                        <option value="1">+1 จุด</option>
+                        <option value="2">+2 จุด</option>
+                    </select>
+                </label>
+                <label class="range-row">คมขึ้น <input type="range" id="inkSharp" min="0" max="100" value="0"><b id="inkSharpV">0%</b></label>
+                <p class="hint">หนาเส้น / คมขึ้น ใช้กับทุกเลเยอร์ตอนส่งออก (เห็นในพรีวิวทันที) · 1 จุด ≈ 2 มม. บนตัว</p>
+            </div>
+            <p id="eFiles" class="hint"></p>
+            <p class="hint">ชื่อไฟล์ต่อท้ายตามเพศ: ชาย = _mr · หญิง = _fr (ขา = _legs_mr / _legs_fr)
+                · ชายและหญิง = ได้ไฟล์แยกของแต่ละเพศ ตามตำแหน่งที่จัดไว้ของแต่ละเพศ
+                · ชายหรือหญิงเท่านั้น = ไฟล์เดียว ตัว 3D สลับไปเพศนั้นให้</p>
+            <div class="field">
+                <span>รูปในร้าน (256 × 256 — กรอบนี้คือรูปที่ได้จริง)</span>
+                <div id="shotBox" class="shot-box">
+                    <canvas id="shotCanvas" class="hidden" title="ลาก = เลื่อน · ล้อ = ซูม · ดับเบิลคลิก = พอดีกรอบ"></canvas>
+                    <span id="shotEmpty">ลากรูปมาวางตรงนี้ หรือคลิกเลือกรูป<br><small>ไม่ใส่ = ครอปจากลายบนภาพ UV ให้</small></span>
+                </div>
+                <input id="fileShot" type="file" accept="image/*" hidden>
+                <div id="shotTools" class="hidden">
+                    <p class="hint">ลากในกรอบ = เลื่อนรูป · ล้อเมาส์ = ซูม · ดับเบิลคลิก = พอดีกรอบ</p>
+                    <label class="range-row">ซูม <input type="range" id="shotZoom" min="10" max="800" value="100"><b id="shotZoomV">100%</b></label>
+                    <div class="btn-row">
+                        <button id="shotFit" class="btn">พอดีกรอบ</button>
+                        <button id="shotFill" class="btn">เต็มกรอบ</button>
+                    </div>
+                </div>
+                <div class="btn-row">
+                    <button id="shotPick" class="btn">เลือกรูป…</button>
+                    <button id="shot3d" class="btn needs-body" title="ขึ้นกรอบบนตัว 3D ให้จัดกล้องก่อนแล้วค่อยถ่าย">ถ่ายจากตัว 3D…</button>
+                </div>
+                <label class="check"><input type="checkbox" id="shotGray"> รูปในร้านเป็นขาวดำ (ใช้กับรูปที่ใส่เองและที่ครอปจากลาย)</label>
+                <button id="shotClear" class="btn wide" disabled>ไม่ใช้รูปนี้ (ครอปจากลายแทน)</button>
+            </div>
+            <p id="eWarn" class="warn hidden"></p>
+
+            <button id="btnYtd" class="btn primary wide">ดาวน์โหลด .ytd (ใส่ใน stream/)</button>
+            <button id="btnThumb" class="btn wide">ดาวน์โหลดรูปในร้าน (.png → html/img/)</button>
+            <button id="btnAb" class="btn wide">ดาวน์โหลด _ab.png (ถ้าจะแพ็คเองใน CodeX)</button>
+
+            <label class="field"><span>บรรทัดสำหรับ Config.Tattoos</span>
+                <textarea id="eConfig" rows="3" readonly></textarea>
+            </label>
+            <button id="btnCopy" class="btn wide">คัดลอกบรรทัด config</button>
+
+            <ol class="steps">
+                <li>วาง <code>ชื่อ.ytd</code> ใน <code>phutorn_tattoos/stream/</code></li>
+                <li>วาง <code>ชื่อ.png</code> ใน <code>phutorn_tattoos/html/img/</code></li>
+                <li>วางบรรทัด config ใน <code>Config.Tattoos</code></li>
+                <li>รีสตาร์ท resource แล้วเข้าเกมใหม่ ลองด้วย <code>/tattootest ชื่อ</code> (เปิด Config.Debug)</li>
+            </ol>
+        </section>
+    </aside>
+</main>
+
+<div id="toast" class="hidden"></div>
+<div id="brushCursor" class="hidden"></div>
+
+<script src="data.js"></script>
+<script src="model.js" onerror="window.PLACER_BODY = null"></script>
+<script src="ytd.js"></script>
+<script src="placer.js"></script>
+<script src="body.js"></script>
+</body>
+</html>
